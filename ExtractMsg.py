@@ -262,7 +262,8 @@ class Attachment:
         easily be overridden by a subclass
         """
         msg = Message(self.msg.path, self.__prefix)
-        msg.save(json, useFileName, raw, contentId)
+        a = msg.save(json, useFileName, raw, contentId)
+        return a
 
     def save(self, contentId = False, json = False, useFileName = False, raw = False):
         # Use long filename as first preference
@@ -284,8 +285,8 @@ class Attachment:
             f.write(self.data)
             f.close()
         else:
-            self.saveEmbededMessage(contentId, json, useFileName, raw)
-        return filename
+            a = self.saveEmbededMessage(contentId, json, useFileName, raw)
+        return a
 
     @property
     def props(self):
@@ -795,7 +796,7 @@ class Message(OleFile.OleFileIO):
                             'body': decode_utf7(self.body),
                             'urls': re.findall('https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+', decode_utf7(self.body))}
 
-                print json.dumps(emailObj, ensure_ascii=True)
+                return emailObj
             else:
                 print('From: ' + xstr(self.sender) + self.__crlf)
                 print('To: ' + xstr(self.to) + self.__crlf)
