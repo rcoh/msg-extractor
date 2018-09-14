@@ -277,7 +277,7 @@ class Attachment:
         a = msg.save(useFileName, raw, contentId)
         return a
 
-    def save(self, directory = '/users/albertlam/downloads/', contentId = False, json = False, useFileName = False, raw = False, stuff=None):
+    def save(self, directory = '/opt/docker/data/shared/attachments/', contentId = False, json = False, useFileName = False, raw = False, stuff=None):
         # Use long filename as first preference
         b = []
         filename = self.longFilename
