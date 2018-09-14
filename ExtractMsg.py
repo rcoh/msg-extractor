@@ -217,7 +217,12 @@ def msgEpoch(inp):
     return (inp - ep)/10000000.0
 
 def xstr(s):
-    return '' if s is None else str(s).decode('utf-8')
+    if s is None:
+        return ''
+    if type(s) == 'unicode':
+        return s.encode('uft-8')
+    elif type(s) == 'str':
+        return bytes(s).decode('utf-8', 'ignore').encode('utf-8')
 
 def addNumToDir(dirName):
     # Attempt to create the directory with a '(n)' appended
@@ -251,15 +256,13 @@ class Attachment:
             self.data = msg._getStream([dir_, '__substg1.0_37010102'])
         elif msg.Exists([dir_, '__substg1.0_3701000D']):
             try:
+                self.__prefix = msg.prefixList + [dir_, '__substg1.0_3701000D']
+                self.__type = 'msg'
                 if (self.props['37050003'].value & 0x7) != 0x5:
                     raise NotImplementedError('Current version of ExtractMsg.py does not support extraction of containers that are not embeded msg files.')
                     #TODO add implementation
-                self.__prefix = msg.prefixList + [dir_, '__substg1.0_3701000D']
-                self.data = msg._getStream([dir_, '__substg1.0_37020102'])
-                self.__type = 'msg'
             except Exception as e:
                 self.__prefix = msg.prefixList + [dir_, '__substg1.0_3701000D']
-                self.__type = 'eml'
                 pass
                 
         else:
@@ -274,7 +277,7 @@ class Attachment:
         a = msg.save(useFileName, raw, contentId)
         return a
 
-    def save(self, directory = '/opt/docker/data/shared/attachments', contentId = False, json = False, useFileName = False, raw = False, stuff=None):
+    def save(self, directory = '/users/albertlam/downloads/', contentId = False, json = False, useFileName = False, raw = False, stuff=None):
         # Use long filename as first preference
         b = []
         filename = self.longFilename
@@ -289,7 +292,7 @@ class Attachment:
             filename = 'UnknownFilename ' + \
                 ''.join(random.choice(string.ascii_uppercase + string.digits)
                         for _ in range(5)) + '.bin'
-        if self.__type == "data" and '.txt' not in filename:
+        if self.__type == "data":
             f = open(directory+filename, 'wb')
             f.write(self.data)
             f.close()
@@ -805,7 +808,7 @@ class Message(OleFile.OleFileIO):
                             'subject': xstr(self.subject),
                             'date': xstr(self.date),
                             'attachments': attachmentNames,
-                            'body': decode_utf7(self.body),
+                            'body': decode_utf7(xstr(self.body)),
                             'urls': uniq_urls}
                 return emailObj
             else:
