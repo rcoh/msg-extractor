@@ -784,6 +784,7 @@ class Message(OleFile.OleFileIO):
         the filename is used as the name of the folder; otherwise, the message's date
         and subject are used as the folder name.'''
 
+        # import pdb; pdb.set_trace()
         if useFileName:
             # strip out the extension
             dirName = self.filename.split('/').pop().split('.')[0]
@@ -808,12 +809,14 @@ class Message(OleFile.OleFileIO):
             # f = open('message.' + fext, 'w')
             # From, to , cc, subject, date
 
+            ret_messages = []
             toJson = True
             attachmentNames = []
-            attaches = []
             # Save the attachments
             for attachment in self.attachments:
-                attachmentNames.append(str(attachment.save()))
+                if attachment._Attachment__type == 'msg':
+                    ret_messages += attachment.save()
+                attachmentNames.append(attachment.save())
             if toJson:
                 urls = re.findall('https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+', decode_utf7(self.body))
                 uniq_urls = []
@@ -828,7 +831,8 @@ class Message(OleFile.OleFileIO):
                             'attachments': attachmentNames,
                             'body': decode_utf7(self.body),
                             'urls': uniq_urls}
-                return emailObj
+                ret_messages.append(emailObj)
+                return ret_messages
             else:
                 # print('From: ' + xstr(self.sender) + self.__crlf)
                 # print('To: ' + xstr(self.to) + self.__crlf)
@@ -914,6 +918,8 @@ if __name__ == '__main__':
     toJson = True
     useFileName = False
 
+    msgs = []
+
     for rawFilename in sys.argv[1:]:
         if rawFilename == '--raw':
             writeRaw = True
@@ -930,8 +936,10 @@ if __name__ == '__main__':
                 if writeRaw:
                     msg.saveRaw()
                 else:
-                    msg.save(useFileName)
+                    msgs += msg.save(useFileName)
             except Exception as e:
                 msg.debug()
                 print("Error with file '" + filename + "': " +
                       traceback.format_exc())
+
+    print(json.dumps(msgs))
