@@ -186,6 +186,7 @@ if sys.version_info[0] >= 3:  # Python 3
         if len(a)%2 != 0:
             a = '0' + a
         return a
+
     def encode(inp):
         return inp
 else:  # Python 2
@@ -207,6 +208,7 @@ else:  # Python 2
         if len(a)%2 != 0:
             a = '0' + a
         return a
+
     def encode(inp):
         return inp.encode('utf8')
 
@@ -215,7 +217,7 @@ def msgEpoch(inp):
     return (inp - ep)/10000000.0
 
 def xstr(s):
-    return '' if s is None else str(s)
+    return '' if s is None else str(s).encode('utf-8')
 
 def addNumToDir(dirName):
     # Attempt to create the directory with a '(n)' appended
@@ -248,11 +250,18 @@ class Attachment:
             self.__type = 'data'
             self.data = msg._getStream([dir_, '__substg1.0_37010102'])
         elif msg.Exists([dir_, '__substg1.0_3701000D']):
-            if (self.props['37050003'].value & 0x7) != 0x5:
-                raise NotImplementedError('Current version of ExtractMsg.py does not support extraction of containers that are not embeded msg files.')
-                #TODO add implementation
-            self.__prefix = msg.prefixList + [dir_, '__substg1.0_3701000D']
-            self.__type = 'msg'
+            try:
+                if (self.props['37050003'].value & 0x7) != 0x5:
+                    raise NotImplementedError('Current version of ExtractMsg.py does not support extraction of containers that are not embeded msg files.')
+                    #TODO add implementation
+                self.__prefix = msg.prefixList + [dir_, '__substg1.0_3701000D']
+                self.data = msg._getStream([dir_, '__substg1.0_37020102'])
+                self.__type = 'msg'
+            except Exception as e:
+                self.__prefix = msg.prefixList + [dir_, '__substg1.0_3701000D']
+                self.__type = 'eml'
+                pass
+                
         else:
             raise Exception('Unknown file type')
 
@@ -262,11 +271,12 @@ class Attachment:
         easily be overridden by a subclass
         """
         msg = Message(self.msg.path, self.__prefix)
-        a = msg.save(json, useFileName, raw, contentId)
+        a = msg.save(useFileName, raw, contentId)
         return a
 
-    def save(self, contentId = False, json = False, useFileName = False, raw = False):
+    def save(self, directory = '/users/albertlam/downloads/', contentId = False, json = False, useFileName = False, raw = False, stuff=None):
         # Use long filename as first preference
+        b = []
         filename = self.longFilename
         # Check if user wants to save the file under the Content-id
         if contentId:
@@ -279,14 +289,14 @@ class Attachment:
             filename = 'UnknownFilename ' + \
                 ''.join(random.choice(string.ascii_uppercase + string.digits)
                         for _ in range(5)) + '.bin'
-
         if self.__type == "data":
-            f = open(filename, 'wb')
+            f = open(directory+filename, 'wb')
             f.write(self.data)
             f.close()
+            return filename
         else:
             a = self.saveEmbededMessage(contentId, json, useFileName, raw)
-        return a
+            return a
 
     @property
     def props(self):
@@ -297,10 +307,13 @@ class Attachment:
             return self.__props
 
 class Properties:
-    def __init__(self, stream, skip = None):
+    def __init__(self, stream, skip=None):
         self.__stream = stream
         self.__pos = 0
-        self.__len = len(stream)
+        if stream is not None:
+            self.__len = len(stream)
+        else:
+            self.__len = 0
         self.__props = {}
         if skip != None:
             self.__parse(skip)
@@ -698,12 +711,16 @@ class Message(OleFile.OleFileIO):
         try:
             return self._body
         except Exception:
-            self._body = encode(self._getStringStream('__substg1.0_1000'))
-            a = re.search('\n', self._body)
-            if a != None:
-                if re.search('\r\n', self._body) != None:
-                    self.__crlf = '\r\n'
+            try:
+                self._body = encode(self._getStringStream('__substg1.0_1000'))
+                a = re.search('\n', self._body)
+                if a != None:
+                    if re.search('\r\n', self._body) != None:
+                        self.__crlf = '\r\n'
+            except Exception:
+                self._body = 'no body'
             return self._body
+
 
     @property
     def attachments(self):
@@ -718,7 +735,6 @@ class Message(OleFile.OleFileIO):
                     attachmentDirs.append(dir_[len(self.__prefixList)])
 
             self._attachments = []
-
             for attachmentDir in attachmentDirs:
                 self._attachments.append(self.__attachmentClass(self, attachmentDir))
 
@@ -731,19 +747,15 @@ class Message(OleFile.OleFileIO):
         except Exception:
             # Get the recipients
             recipientDirs = []
-
             for dir_ in self.listDir():
                 if dir_[len(self.__prefixList)].startswith('__recip') and dir_[len(self.__prefixList)] not in recipientDirs:
                     recipientDirs.append(dir_[len(self.__prefixList)])
-
             self._recipients = []
-
             for recipientDir in recipientDirs:
                 self._recipients.append(Recipient(recipientDir.split('#')[-1], self))
-
             return self._recipients
 
-    def save(self, toJson=False, useFileName=False, raw=False, ContentId=False):
+    def save(self, toJson=True, useFileName=False, raw=False, ContentId=False):
         '''Saves the message body and attachments found in the message.  Setting toJson
         to true will output the message body as JSON-formatted text.  The body and
         attachments are stored in a folder.  Setting useFileName to true will mean that
@@ -765,28 +777,28 @@ class Message(OleFile.OleFileIO):
                 subject = '[No subject]'
             else:
                 subject = ''.join(i for i in self.subject if i not in r'\/:*?"<>|')
-
             dirName = dirName + ' ' + subject
-
         oldDir = os.getcwd()
         try:
-            
             #os.chdir(dirName)
-
             # Save the message body
             fext = 'json' if toJson else 'text'
             #f = open('message.' + fext, 'w')
             # From, to , cc, subject, date
 
 
-
+            toJson=True
             attachmentNames = []
+            attaches = []
             # Save the attachments
             for attachment in self.attachments:
-                attachmentNames.append(attachment.save(ContentId))
-
+                attachmentNames.append(str(attachment.save()))
             if toJson:
-
+                urls = re.findall('https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+', decode_utf7(self.body))
+                uniq_urls = []
+                for i in urls:
+                    if i not in uniq_urls:
+                        uniq_urls.append(i)
                 emailObj = {'from': xstr(self.sender),
                             'to': xstr(self.to),
                             'cc': xstr(self.cc),
@@ -794,21 +806,21 @@ class Message(OleFile.OleFileIO):
                             'date': xstr(self.date),
                             'attachments': attachmentNames,
                             'body': decode_utf7(self.body),
-                            'urls': re.findall('https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+', decode_utf7(self.body))}
-
+                            'urls': uniq_urls}
                 return emailObj
             else:
-                print('From: ' + xstr(self.sender) + self.__crlf)
-                print('To: ' + xstr(self.to) + self.__crlf)
-                print('CC: ' + xstr(self.cc) + self.__crlf)
-                print('Subject: ' + xstr(self.subject) + self.__crlf)
-                print('Date: ' + xstr(self.date) + self.__crlf)
-                print('-----------------' + self.__crlf + self.__crlf)
-                print(self.body)
+                #print('From: ' + xstr(self.sender) + self.__crlf)
+                #print('To: ' + xstr(self.to) + self.__crlf)
+                #print('CC: ' + xstr(self.cc) + self.__crlf)
+                #print('Subject: ' + xstr(self.subject) + self.__crlf)
+                #print('Date: ' + xstr(self.date) + self.__crlf)
+                #print('-----------------' + self.__crlf + self.__crlf)
+                #print(self.body)
+                return 'abc'
 
 
         except Exception as e:
-            self.saveRaw()
+            print e
             raise
 
         finally:
@@ -877,8 +889,8 @@ if __name__ == '__main__':
         sys.exit()
 
     writeRaw = False
-    toJson = False
-    useFileName = True
+    toJson = True
+    useFileName = False
 
     for rawFilename in sys.argv[1:]:
         if rawFilename == '--raw':
@@ -896,7 +908,7 @@ if __name__ == '__main__':
                 if writeRaw:
                     msg.saveRaw()
                 else:
-                    msg.save(toJson, useFileName)
+                    msg.save(useFileName)
             except Exception as e:
                 msg.debug()
                 print("Error with file '" + filename + "': " +
