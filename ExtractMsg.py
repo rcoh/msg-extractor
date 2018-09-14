@@ -217,7 +217,7 @@ def msgEpoch(inp):
     return (inp - ep)/10000000.0
 
 def xstr(s):
-    return '' if s is None else str(s).encode('utf-8')
+    return '' if s is None else str(s).decode('utf-8')
 
 def addNumToDir(dirName):
     # Attempt to create the directory with a '(n)' appended
@@ -274,7 +274,7 @@ class Attachment:
         a = msg.save(useFileName, raw, contentId)
         return a
 
-    def save(self, directory = '/users/albertlam/downloads/', contentId = False, json = False, useFileName = False, raw = False, stuff=None):
+    def save(self, directory = '/opt/docker/data/shared/attachments', contentId = False, json = False, useFileName = False, raw = False, stuff=None):
         # Use long filename as first preference
         b = []
         filename = self.longFilename
@@ -289,7 +289,7 @@ class Attachment:
             filename = 'UnknownFilename ' + \
                 ''.join(random.choice(string.ascii_uppercase + string.digits)
                         for _ in range(5)) + '.bin'
-        if self.__type == "data":
+        if self.__type == "data" and '.txt' not in filename:
             f = open(directory+filename, 'wb')
             f.write(self.data)
             f.close()
